@@ -64,7 +64,8 @@ def blend(draws: list[dict[int, Evidence]]) -> dict[int, Evidence]:
         priced = [item for item in seen if item.price_median > 0]
         if not priced:
             # Every draw called it worthless. Keep that verdict rather than inventing a band.
-            blended[index] = seen[0]
+            # Its ceiling still has to be agreed: Price Memory may yet supply a band for it.
+            blended[index] = replace(seen[0], ceiling=agreed_ceiling(seen))
             continue
         logs = [math.log(item.price_median) for item in priced]
         mean_log = sum(logs) / len(logs)
