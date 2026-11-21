@@ -59,6 +59,8 @@ Anchors, since gross totals for a whole Line Item are easy to get wrong by an or
 - A thermal imaging camera billed as its own position is a small equipment charge of 15-20 EUR, not a leak-detection service.
 
 {distribution}
+The Policy outranks every price. Whenever a Policy clause makes a position worth less than its usual market price (a ceiling, a reduction to a share, the price of the old version, a current value), follow the clause, however far below the usual price for such an item that puts you. The usual price is right only where no clause changes it.
+
 Amounts the Policy states. Find them first, because they override every market price:
 - List every EUR amount in the Policy: class sub-limits (valuables, means of payment, bicycles and mobility equipment, appliances, unspecified high-value articles), caps on a head of cost, and the deductible.
 - A Line Item is worth the LOWER of its market price and the ceiling of its class. A stolen watch bought for 7,000 under a EUR 2,500 valuables sub-limit is worth 2,500: not 7,000, and not the price of the replacement. 900 in cash under a EUR 500 means-of-payment limit is worth 500.
@@ -68,8 +70,14 @@ Amounts the Policy states. Find them first, because they override every market p
 - A deductible is taken off once per insured event, shared across the covered Line Items in proportion to their value. With ceilings of 2,500 and 500 and a deductible of 150, the two lines are worth 2,375 and 475.
 - A ceiling is a limit on a covered line, never a reason to call it uncovered. A line that compensates stolen or destroyed insured property is covered up to its ceiling.
 
+Reductions to a share. A clause can pay a covered item at a stated share of its value:
+- Find every clause that pays "one half of the amount otherwise payable", a percentage, or "in proportion only", and the fact that triggers it.
+- In the surge Policies an appliance connected to the mains without an overvoltage protective device is paid at one half. When the Damage Description says nothing on the circuit was on a surge-protected strip, halve price_low, price_median and price_high of that appliance and of its accessories. A speaker system settled at 252-315 that way, and at 389-525 where nothing was established.
+- Where the Damage Description establishes nothing either way, or an endorsement waives the requirement, make no reduction.
+- A reduction lowers the price, never coverage_probability.
+
 Upgrades. Unless this Policy says otherwise, it pays the price of the OLD version that was there before, not the price of the more expensive version that replaced it:
-- A position that bills the WHOLE replacement in a better version (a larger air conditioning unit, chrome instead of plain copper, a higher-spec watch or television) is covered. Price the OLD item in standard grade: the 3.5 kW unit that failed, not the 7.1 kW unit on the invoice. Do not lower coverage_probability because it is an upgrade: all seven such positions in the settled Games were paid.
+- A position that bills the WHOLE replacement in a better version (a larger air conditioning unit, chrome instead of plain copper, a higher-spec watch or television) is covered. Price the OLD item in standard grade: the 3.5 kW unit that failed, not the 7.1 kW unit on the invoice. Price its installation, delivery and connection for the old item as well. Do not lower coverage_probability because it is an upgrade: all seven such positions in the settled Games were paid.
 - A position that bills ONLY the improvement (an upgrade surcharge, a "difference", an elective better material or model on its own line) is worth nothing. None of the four in the settled Games had a Charge proven fair.
 - Something that was not there before the event at all (an added sensor, an extra valve) is worth nothing.
 - This Policy says otherwise when the old part is no longer obtainable (then the nearest available equivalent of the same grade sets the price: an unavoidable difference is not an improvement, a chosen one is), when a public authority requires the better version, or when the Policy text records the better version as agreed. Then follow the Policy.
@@ -86,6 +94,8 @@ How to judge coverage:
 - Read the WHOLE clause, because the half that narrows cover is usually followed by the half that restores it. Two specific cases, both of which have cost us real money:
   - SCOPE. A clause confining indemnity to "those parts that were themselves affected" is normally followed by an extension: where a room was wetted as a whole, the whole of that room counts as affected for extraction, drying and the reinstatement of its finishes. A Damage Description saying the water reached "about a square metre" does NOT narrow that extension. Price the quantity the invoice bills — 18 m2 of parquet, 15 m of skirting, a whole ceiling — not the square metre the description mentions.
   - CONSUMABLES. The exclusion of "material whose type, quantity or dimension does not correspond to the installation" ends by sending minor fixings and consumables back to the covered materials head. Clamps, binding wire, screws and sealing material used on the covered repair stay covered.
+  - ITEMISATION. The clause that an item without itemisation "is not indemnified" removes administrative fees, processing fees and unspecified flat charges. It does not remove the position that compensates the stolen or destroyed insured property itself: that position is the claim. "Compensation for robbery damage" read as uncovered on this clause was worth 2,900.
+  - SAME NAME TWICE. "Only the first such charge is indemnified" needs a real duplicate. A second hours or material position with the same name as an earlier one, and hours billed next to a flat-rate position, were paid every time that was the only reason against them. Do not go below 0.7 for that reason alone.
   - PERIL. An exclusion printed inside one peril's own section removes cover only for that peril, not for the Policy. Flood, precipitation, groundwater and backing-up are excluded from the escape-of-water peril and are separately insurable as natural hazards. If no Schedule is supplied, do not read a peril-scoped exclusion as though it excluded the whole claim.
 - The Damage Description is the statement of facts, and it is where most worthless positions are named. When it says an item was not affected by the event, was lost or damaged separately, was already there or already damaged before, was added new, or was the owner's own choice, apply the Policy clause to that fact: the position is not covered. The same holds when the Line Item name carries such a remark itself.
 - A position that installs, delivers, connects or disposes of an item that is itself not covered is not covered either.
