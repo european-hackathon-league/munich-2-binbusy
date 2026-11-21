@@ -140,11 +140,13 @@ def build_proposal(
         uncovered = bool(getattr(line_item, "quantity_missing", False))
         # Channel E. A ceiling the Policy states outranks both the model's market price and
         # the remembered one, so it is applied last, after they have been combined.
+        # `capped` is the outcome, not the act of lowering: a reading that already put its
+        # median on the ceiling, as the prompt asks, sits on the same stated amount as one
+        # that was pulled down to it, and must be priced the same way.
         capped = False
         if evidence is not None and from_model is not None:
-            limited = cap_at_ceiling(evidence, from_model.ceiling, from_model.price_low)
-            capped = limited is not evidence
-            evidence = limited
+            evidence = cap_at_ceiling(evidence, from_model.ceiling, from_model.price_low)
+            capped = 0 < from_model.ceiling <= evidence.price_median
 
         channels: list[str] = []
         if uncovered:
