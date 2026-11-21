@@ -70,6 +70,53 @@ def stated_amounts(text: str) -> list[str]:
     ]
 
 
+#: Heads the clauses rescued from the dropped parts by `referenced_clauses`.
+REFERENCED_HEADER = "CLAUSES THE LOSS DESCRIPTION REFERS TO IN OTHER PARTS OF THE POLICY"
+
+_CLAUSE_NUMBER_RE = re.compile(r"(?<![\d.])\d+(?:\.\d+)+")
+_CLAUSE_HEADING_RE = re.compile(r"^(\d+(?:\.\d+)+)[ \t]+[A-Z]", re.MULTILINE)
+
+
+def referenced_clauses(referring_text: str, dropped: dict[int, str]) -> list[str]:
+    """Each clause of the *dropped* parts that *referring_text* names by number, verbatim.
+
+    PART 11 lists "the operative provisions for determining how each line of each invoice
+    in this claim is characterised", and some of them sit in parts the slicer drops. In the
+    surge Games (1, 17, 19) that was 2.3.3: an appliance connected without an overvoltage
+    protective device is paid at "one half of the amount otherwise payable". Both readings
+    priced those appliances in full, about twice their Fair Value. In Games 31 and 45 it
+    was 6.3: "the sub-limit determines the ceiling of the indemnity for that class even
+    where the insurable value demonstrably exceeds it".
+
+    A clause runs from its numbered heading to the next heading of the same part that is
+    not one of its own sub-clauses. Only a number belonging to the part it stands in is a
+    heading: a wrapped line that happens to begin with "2.3.3 and no other" in PART 9 is
+    not. Clauses come back in document order, each once.
+    """
+    wanted = set(_CLAUSE_NUMBER_RE.findall(referring_text))
+    found: list[str] = []
+    for part in sorted(dropped):
+        text = dropped[part]
+        headings = [
+            heading
+            for heading in _CLAUSE_HEADING_RE.finditer(text)
+            if heading.group(1).startswith(f"{part}.")
+        ]
+        covered_until = -1
+        for position, heading in enumerate(headings):
+            number = heading.group(1)
+            if number not in wanted or heading.start() < covered_until:
+                continue
+            end = len(text)
+            for later in headings[position + 1 :]:
+                if not later.group(1).startswith(number + "."):
+                    end = later.start()
+                    break
+            covered_until = end
+            found.append(text[heading.start() : end].strip("\n"))
+    return found
+
+
 def _header_matches(policy_text: str) -> list[re.Match[str]]:
     return list(_HEADER_RE.finditer(policy_text))
 
@@ -125,9 +172,21 @@ def slice_policy(policy_text: str, keep: frozenset[int] = DEFAULT_KEEP) -> str:
         return policy_text
 
     sliced = "\n".join(kept)
-    amounts = stated_amounts(
-        "\n".join(sections[number] for number in sorted(sections) if number not in keep)
+    dropped_parts = {number: text for number, text in sections.items() if number not in keep}
+    dropped = "\n".join(dropped_parts[number] for number in sorted(dropped_parts))
+    referenced = (
+        referenced_clauses(sections[CLAIM_SPECIFIC_PART], dropped_parts)
+        if CLAIM_SPECIFIC_PART in sections and CLAIM_SPECIFIC_PART in keep
+        else []
     )
+    if referenced:
+        sliced = f"{sliced}\n{REFERENCED_HEADER}\n\n" + "\n\n".join(referenced) + "\n"
+    # A paragraph already inside a rescued clause is not repeated.
+    amounts = [
+        paragraph
+        for paragraph in stated_amounts(dropped)
+        if not any(paragraph in clause for clause in referenced)
+    ]
     if amounts:
         sliced = f"{sliced}\n{AMOUNTS_HEADER}\n\n" + "\n\n".join(amounts) + "\n"
     # A big policy that slices down to almost nothing means the parse went

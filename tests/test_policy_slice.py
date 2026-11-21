@@ -3,6 +3,8 @@ from pathlib import Path
 
 from src.evidence.policy.slice import (
     AMOUNTS_HEADER,
+    REFERENCED_HEADER,
+    referenced_clauses,
     stated_amounts,
     CLAIM_SPECIFIC_PART,
     DEFAULT_KEEP,
@@ -201,6 +203,55 @@ class StatedAmountsTests(unittest.TestCase):
 
     def test_amounts_are_recognised_in_either_order(self) -> None:
         self.assertEqual(len(stated_amounts("up to EUR 250\n\n70 EUR net\n\nnone")), 2)
+
+
+class ReferencedClausesTests(unittest.TestCase):
+    """PART 11 names its operative clauses; the ones in dropped parts must reach the model."""
+
+    POLICY = (
+        "PART 2 - INSURED PERILS\n"
+        "2.3.2 Fire\nNot named by the loss description.\n\n"
+        "2.3.3 Overvoltage caused by lightning\n"
+        "Damage arising through overvoltage.\n\n"
+        "Where an appliance was connected without a protective device, the indemnity is one\n"
+        "half of the amount otherwise payable.\n\n"
+        "2.4 Water\nNot named either.\n\n"
+        "PART 4 - INSURED PROPERTY\n" + "4.2.4 Appliances are insured under 2.3.3 only.\n" * 60
+        + "\nPART 9 - DUTIES\n"
+        "9.1.5 Appliances must be connected through protective devices. The consequence is in\n"
+        "2.3.3 and no other; 9.2 does not apply to it.\n\n"
+        "PART 11 - LOSS DESCRIPTION\n"
+        "11.3 Clauses 2.3.3, 4.2.4 and 7.1.9 are the operative provisions.\n"
+    )
+
+    def test_a_clause_named_by_part_11_is_kept_whole(self) -> None:
+        sliced = slice_policy(self.POLICY)
+        self.assertIn(REFERENCED_HEADER, sliced)
+        rescued = sliced.split(REFERENCED_HEADER)[1]
+        self.assertIn("2.3.3 Overvoltage caused by lightning", rescued)
+        self.assertIn("half of the amount otherwise payable.", rescued)
+
+    def test_neighbouring_clauses_stay_dropped(self) -> None:
+        sliced = slice_policy(self.POLICY)
+        self.assertNotIn("2.3.2 Fire", sliced)
+        self.assertNotIn("2.4 Water", sliced)
+
+    def test_a_wrapped_line_starting_with_the_number_is_not_a_heading(self) -> None:
+        rescued = slice_policy(self.POLICY).split(REFERENCED_HEADER)[1]
+        self.assertNotIn("and no other", rescued)
+        self.assertEqual(rescued.count("2.3.3 "), 1)
+
+    def test_a_clause_is_cut_at_the_next_heading_but_keeps_its_sub_clauses(self) -> None:
+        dropped = {6: "6.3 Sub-limits\nA.\n6.3.1 Detail\nB.\n6.4 Other\nC.\n"}
+        self.assertEqual(
+            referenced_clauses("see 6.3", dropped), ["6.3 Sub-limits\nA.\n6.3.1 Detail\nB."]
+        )
+
+    def test_nothing_is_added_without_part_11(self) -> None:
+        policy = "PART 2 - PERILS\n2.3.3 Overvoltage\nText.\n\nPART 4 - PROPERTY\n" + (
+            "4.1 See 2.3.3.\n" * 300
+        )
+        self.assertNotIn(REFERENCED_HEADER, slice_policy(policy))
 
 
 if __name__ == "__main__":  # pragma: no cover - manual verification helper
