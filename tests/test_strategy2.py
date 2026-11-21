@@ -492,6 +492,29 @@ class PolicyCeilingTests(unittest.TestCase):
         self.assertGreaterEqual(price.acceptance_limit, 2375.0)
         self.assertLessEqual(price.acceptance_limit, 2500.0)
 
+    def test_a_reading_already_on_its_ceiling_is_priced_like_one_pulled_down_to_it(self) -> None:
+        # The prompt asks for price_median at the ceiling. Without this the item fell back
+        # to the Limit of an unanchored model price: 708 against a Fair Value of 2,375.
+        case = case_with(LineItem(3, "Compensation for stolen watch (1 pcs)"))
+        on_it = {3: Evidence(3, 0.98, 2300.0, 2500.0, 2500.0, ceiling=2500.0)}
+        decisions: list = []
+        price = build_proposal(case, on_it, {}, decisions).by_index()[3]
+        self.assertGreaterEqual(price.acceptance_limit, 2375.0)
+        self.assertLessEqual(price.acceptance_limit, 2500.0)
+        self.assertIn("E:ceiling", decisions[0].channels)
+
+        under_it = {3: Evidence(3, 0.98, 1500.0, 1800.0, 2100.0, ceiling=2500.0)}
+        decisions = []
+        build_proposal(case, under_it, {}, decisions)
+        self.assertNotIn("E:ceiling", decisions[0].channels)
+
+    def test_readings_that_all_price_at_zero_still_have_to_agree_on_the_ceiling(self) -> None:
+        with_one = Evidence(1, 0.1, 0.0, 0.0, 0.0, ceiling=500.0)
+        without = Evidence(1, 0.1, 0.0, 0.0, 0.0)
+        self.assertEqual(_blend([{1: with_one}, {1: without}])[1].ceiling, 0.0)
+        self.assertEqual(_blend([{1: without}, {1: with_one}])[1].ceiling, 0.0)
+        self.assertEqual(_blend([{1: with_one}, {1: with_one}])[1].ceiling, 500.0)
+
     def test_a_lower_remembered_price_does_not_widen_a_loss_the_model_puts_above_the_ceiling(
         self,
     ) -> None:
