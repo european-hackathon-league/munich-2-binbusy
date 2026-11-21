@@ -28,6 +28,7 @@ space *narrows* the band, which raises both numbers toward the estimate.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from src.pricing.engine import Evidence
 from src.strategies.strategy2.constants import (
@@ -105,7 +106,7 @@ def agreed_ceiling(readings: list[Evidence]) -> float:
     return max(ceilings)
 
 
-def cap_at_ceiling(evidence: Evidence, ceiling: float) -> Evidence:
+def cap_at_ceiling(evidence: Evidence, ceiling: float, model_low: float = 0.0) -> Evidence:
     """Never estimate a Line Item above what the Policy can pay for it.
 
     Game 45: a stolen watch under a EUR 2,500 valuables sub-limit. Both readings priced the
@@ -115,10 +116,15 @@ def cap_at_ceiling(evidence: Evidence, ceiling: float) -> Evidence:
     an amount the Policy states.
 
     The low end of the band is kept, so an item only a little above its ceiling stays
-    uncertain, while one far above it collapses to just under the ceiling.
+    uncertain, while one far above it collapses to just under the ceiling. `model_low` is
+    the low end of the model's own band for this Case: when even that is at or above the
+    ceiling, a lower remembered price from another Case says nothing about this loss, and
+    the band collapses as well.
     """
     if ceiling <= 0 or evidence.price_median <= ceiling:
         return evidence
+    if model_low >= ceiling:
+        evidence = replace(evidence, price_low=CEILING_BAND_LOW * ceiling)
     return Evidence(
         index=evidence.index,
         coverage_probability=evidence.coverage_probability,

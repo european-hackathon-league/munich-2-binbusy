@@ -142,7 +142,7 @@ def build_proposal(
         # the remembered one, so it is applied last, after they have been combined.
         capped = False
         if evidence is not None and from_model is not None:
-            limited = cap_at_ceiling(evidence, from_model.ceiling)
+            limited = cap_at_ceiling(evidence, from_model.ceiling, from_model.price_low)
             capped = limited is not evidence
             evidence = limited
 

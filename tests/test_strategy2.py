@@ -492,6 +492,20 @@ class PolicyCeilingTests(unittest.TestCase):
         self.assertGreaterEqual(price.acceptance_limit, 2375.0)
         self.assertLessEqual(price.acceptance_limit, 2500.0)
 
+    def test_a_lower_remembered_price_does_not_widen_a_loss_the_model_puts_above_the_ceiling(
+        self,
+    ) -> None:
+        # Game 45, the cash: both readings 800-1,000 under a EUR 500 limit, and a remembered
+        # price below them whose band reaches far under the ceiling.
+        case = case_with(LineItem(4, "Compensation for cash taken in robbery (1 pcs)"))
+        model = {4: Evidence(4, 0.97, 800.0, 900.0, 1000.0, ceiling=500.0)}
+        memory = {4: Evidence(4, 0.9, 240.0, 480.0, 960.0)}
+        price = build_proposal(case, model, memory).by_index()[4]
+        # The Fair Value was 475-517: accept a fair 475, never go above the ceiling.
+        self.assertGreaterEqual(price.acceptance_limit, 475.0)
+        self.assertLessEqual(price.acceptance_limit, 500.0)
+        self.assertLess(price.charge_price, 475.0)
+
     def test_the_class_discount_keeps_the_ceiling(self) -> None:
         case = case_with(LineItem(1, "Gold watch"), LineItem(2, "Diamond ring"))
         model = {
