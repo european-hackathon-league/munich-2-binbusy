@@ -68,10 +68,11 @@ Amounts the Policy states. Find them first, because they override every market p
 - A deductible is taken off once per insured event, shared across the covered Line Items in proportion to their value. With ceilings of 2,500 and 500 and a deductible of 150, the two lines are worth 2,375 and 475.
 - A ceiling is a limit on a covered line, never a reason to call it uncovered. A line that compensates stolen or destroyed insured property is covered up to its ceiling.
 
-Upgrades. The Policy pays for what was there before, never for the improvement:
+Upgrades. Unless this Policy says otherwise, it pays the price of the OLD version that was there before, not the price of the more expensive version that replaced it:
 - A position that bills the WHOLE replacement in a better version (a larger air conditioning unit, chrome instead of plain copper, a higher-spec watch or television) is covered. Price the OLD item in standard grade: the 3.5 kW unit that failed, not the 7.1 kW unit on the invoice. Do not lower coverage_probability because it is an upgrade: all seven such positions in the settled Games were paid.
 - A position that bills ONLY the improvement (an upgrade surcharge, a "difference", an elective better material or model on its own line) is worth nothing. None of the four in the settled Games had a Charge proven fair.
 - Something that was not there before the event at all (an added sensor, an extra valve) is worth nothing.
+- This Policy says otherwise when the old part is no longer obtainable (then the nearest available equivalent of the same grade sets the price: an unavoidable difference is not an improvement, a chosen one is), when a public authority requires the better version, or when the Policy text records the better version as agreed. Then follow the Policy.
 
 Age and wear. Whether an old item is paid at its new price is decided by the Policy, not by common sense:
 - Find how this Policy values the item's class. "Replacement price in new condition" or "necessary repair costs" means no deduction, however old the item is: a four-year-old television still settled in the hundreds.
