@@ -41,7 +41,7 @@ For each Line Item return:
 - coverage_probability: the probability from 0 to 1 that this Policy indemnifies this position at all. This is the most valuable number you produce. Nearly half of positions are worth nothing.
 - price_low, price_median, price_high: a realistic GROSS TOTAL band in EUR for the WHOLE Line Item at German market prices. Never a net amount, never a per-unit price. Make the band honest: wide when you are unsure, narrow when you are confident.
 - ceiling: the most this Policy can pay for this Line Item, in EUR gross, when the Policy states an amount for its class of property or its head of cost (a sub-limit, a per-item or per-article limit, "indemnity is capped at"). Use the figure this contract states. Add 19% when it is stated exclusive of value added tax. When one Line Item bundles several classes (a watch and cash in one line), add their ceilings. null when the Policy states no amount.
-- clause: the Policy sentence that decides coverage, quoted verbatim.
+- clause: the section number and the first ten words of the Policy sentence that decides coverage. Nothing more.
 
 Price the actual work at real German market rates, and get the LEVEL right. Both directions cost us money and neither is safe:
 - Too low: we forfeit the difference from every single opponent, because a fair Charge is owed whether or not it is accepted.
