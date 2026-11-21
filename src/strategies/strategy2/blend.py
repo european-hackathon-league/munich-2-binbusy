@@ -80,8 +80,53 @@ def blend(draws: list[dict[int, Evidence]]) -> dict[int, Evidence]:
             price_low=low,
             price_median=median,
             price_high=high,
+            ceiling=agreed_ceiling(seen),
         )
     return blended
+
+
+#: Low end of the band of an item capped at its ceiling, as a share of the ceiling. Not
+#: 1.0: a deductible comes off the capped amount (Game 45: 2,500 and 500 less their share
+#: of EUR 150 settled at 0.95 of the ceiling; Game 31: 0.98), and a band with no width
+#: reads as "no information" in `implied_sigma`.
+CEILING_BAND_LOW = 0.9
+
+
+def agreed_ceiling(readings: list[Evidence]) -> float:
+    """The Policy ceiling the readings agree exists, or 0.
+
+    A ceiling that is wrong and too low is the expensive error: it drags the Limit under
+    fair Charges, and each of those is paid at 1.5x. So it binds only when every reading
+    that spoke about the item reported one, and then at the highest value any of them gave.
+    """
+    ceilings = [item.ceiling for item in readings]
+    if not ceilings or min(ceilings) <= 0:
+        return 0.0
+    return max(ceilings)
+
+
+def cap_at_ceiling(evidence: Evidence, ceiling: float) -> Evidence:
+    """Never estimate a Line Item above what the Policy can pay for it.
+
+    Game 45: a stolen watch under a EUR 2,500 valuables sub-limit. Both readings priced the
+    replacement (9,500 and 9,800), Price Memory held 7,225 from a Case with another Policy
+    text, the Charge went out at 6,954.86 and the Limit at 7,411.83. The Fair Value was
+    2,375-2,553. Whatever the market price and whatever was remembered, `t` cannot exceed
+    an amount the Policy states.
+
+    The low end of the band is kept, so an item only a little above its ceiling stays
+    uncertain, while one far above it collapses to just under the ceiling.
+    """
+    if ceiling <= 0 or evidence.price_median <= ceiling:
+        return evidence
+    return Evidence(
+        index=evidence.index,
+        coverage_probability=evidence.coverage_probability,
+        price_low=min(evidence.price_low, CEILING_BAND_LOW * ceiling),
+        price_median=ceiling,
+        price_high=ceiling,
+        ceiling=ceiling,
+    )
 
 
 def combine(model: Evidence | None, memory: Evidence | None) -> Evidence | None:
@@ -139,4 +184,4 @@ def combine(model: Evidence | None, memory: Evidence | None) -> Evidence | None:
     )
 
 
-__all__ = ["blend", "combine", "sigma_of"]
+__all__ = ["agreed_ceiling", "blend", "cap_at_ceiling", "combine", "sigma_of"]

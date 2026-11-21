@@ -2,6 +2,8 @@ import unittest
 from pathlib import Path
 
 from src.evidence.policy.slice import (
+    AMOUNTS_HEADER,
+    stated_amounts,
     CLAIM_SPECIFIC_PART,
     DEFAULT_KEEP,
     MIN_SLICE_CHARS,
@@ -160,6 +162,45 @@ class RealPolicyTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
         self.assertEqual(policy_sections(text), {})
         self.assertEqual(slice_policy(text), text)
+
+
+
+class StatedAmountsTests(unittest.TestCase):
+    """An amount stated in a dropped part still reaches the model."""
+
+    POLICY = (
+        "PART 2 - INSURED PERILS\n"
+        "\n"
+        "2.3.2 Property taken outside the insured premises\n"
+        "Cover away from the insured premises is agreed up to EUR 5,000 per insured event, of\n"
+        "which means of payment are indemnified to no more than EUR 500.\n"
+        "\n"
+        "2.4 A paragraph about procedure that states no amount.\n"
+        "\n"
+        "PART 4 - INSURED PROPERTY\n"
+        + "4.2.3 Means of payment are subject to the sub-limit stated in the schedule.\n" * 40
+    )
+
+    def test_a_paragraph_with_an_amount_is_kept_verbatim(self) -> None:
+        sliced = slice_policy(self.POLICY)
+        self.assertIn("PART 4 - INSURED PROPERTY", sliced)
+        self.assertIn(AMOUNTS_HEADER, sliced)
+        self.assertIn(
+            "which means of payment are indemnified to no more than EUR 500.", sliced
+        )
+        self.assertIn("2.3.2 Property taken outside the insured premises", sliced)
+
+    def test_a_dropped_paragraph_without_an_amount_stays_dropped(self) -> None:
+        sliced = slice_policy(self.POLICY)
+        self.assertNotIn("PART 2 - INSURED PERILS", sliced)
+        self.assertNotIn("about procedure", sliced)
+
+    def test_nothing_is_appended_when_no_dropped_part_states_an_amount(self) -> None:
+        policy = "PART 1 - PURPOSE\nNothing here.\n\nPART 4 - PROPERTY\n" + "4.1 Text.\n" * 300
+        self.assertNotIn(AMOUNTS_HEADER, slice_policy(policy))
+
+    def test_amounts_are_recognised_in_either_order(self) -> None:
+        self.assertEqual(len(stated_amounts("up to EUR 250\n\n70 EUR net\n\nnone")), 2)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual verification helper

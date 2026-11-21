@@ -137,6 +137,7 @@ def aggregate_class_discount(
                 price_low=evidence.price_low,
                 price_median=evidence.price_median,
                 price_high=evidence.price_high,
+                ceiling=evidence.ceiling,
             )
     return out
 

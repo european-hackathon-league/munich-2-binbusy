@@ -25,9 +25,8 @@ _DISTRIBUTION_HINT = (
     f"{SETTLED_MEDIAN:.0f} EUR"
     "   75% under 330 EUR   90% under 616 EUR   99% under 2,345 EUR\n"
     "The remaining 1% runs into five figures; the largest settled position seen so far is "
-    "11,131 EUR. Expensive positions are rarer than they look but they are not bounded by a "
-    "few thousand, and they are typically declared valuables, specialist restoration, or a "
-    "whole-system replacement rather than a labour line.\n"
+    "11,131 EUR. Expensive positions are rarer than they look, and they are typically "
+    "specialist restoration or a whole-system replacement rather than a labour line.\n"
     "Use this as a sanity check on the shape, never as an anchor for an individual position. "
     "Pricing an expensive item like the median is the single most expensive mistake you can "
     "make here, and it is the one we actually make: on the positions we have got wrong, we "
@@ -42,6 +41,7 @@ For each Line Item return:
 - line_item: the POS number printed on the invoice. Use it exactly. Numbering may skip a number and may continue across several invoices in the same document.
 - coverage_probability: the probability from 0 to 1 that this Policy indemnifies this position at all. This is the most valuable number you produce. Roughly 40% of positions are worth nothing.
 - price_low, price_median, price_high: a realistic GROSS TOTAL band in EUR for the WHOLE Line Item at German market prices. Never a net amount, never a per-unit price. Make the band honest: wide when you are unsure, narrow when you are confident.
+- ceiling: the most this Policy can pay for this Line Item, in EUR gross, when the Policy states an amount for its class of property or its head of cost (a sub-limit, a per-item or per-article limit, "indemnity is capped at"). Use the figure this contract states. Add 19% when it is stated exclusive of value added tax. When one Line Item bundles several classes (a watch and cash in one line), add their ceilings. null when the Policy states no amount.
 - clause: the Policy sentence that decides coverage, quoted verbatim.
 
 Price the actual work at real German market rates, and get the LEVEL right. Both directions cost us money and neither is safe:
@@ -59,6 +59,15 @@ Anchors, since gross totals for a whole Line Item are easy to get wrong by an or
 - Appliances, electronics, restoration and structural work reach the low thousands.
 
 {distribution}
+Amounts the Policy states. Find them first, because they override every market price:
+- List every EUR amount in the Policy: class sub-limits (valuables, means of payment, bicycles and mobility equipment, appliances, unspecified high-value articles), caps on a head of cost, and the deductible.
+- A Line Item is worth the LOWER of its market price and the ceiling of its class. A stolen watch bought for 7,000 under a EUR 2,500 valuables sub-limit is worth 2,500: not 7,000, and not the price of the replacement. 900 in cash under a EUR 500 means-of-payment limit is worth 500.
+- The ceiling applies "whatever the actual value" unless the Policy text itself records an agreed value or a raised sub-limit for that item. A purchase price, a receipt or a valuation in the Damage Description does not lift it.
+- When the loss is clearly above the ceiling, the ceiling is the value: put price_median at the ceiling and keep the band narrow.
+- A ceiling "in the aggregate per insured event" is shared by every Line Item of that class. Their price_median values together must not exceed it.
+- A deductible is taken off once per insured event, shared across the covered Line Items in proportion to their value. With ceilings of 2,500 and 500 and a deductible of 150, the two lines are worth 2,375 and 475.
+- A ceiling is a limit on a covered line, never a reason to call it uncovered. A line that compensates stolen or destroyed insured property is covered up to its ceiling.
+
 How to judge coverage:
 - Judge the SERVICE BEING BILLED, not the object it concerns. Inspection, leak detection, drying and assessment are frequently indemnified even when the item investigated is not insured.
 - Read cross-references to the end. An exclusion that finishes with wording like "the head of cost under 5.2.6 remains unaffected" is a pointer to cover, not an exclusion.
@@ -71,7 +80,7 @@ How to judge coverage:
 - An implausible quantity means the position is priced for the plausible quantity, not that it is excluded.
 
 Return JSON only:
-{{"items":[{{"line_item":1,"coverage_probability":0.9,"price_low":0.0,"price_median":0.0,"price_high":0.0,"clause":""}}]}}"""
+{{"items":[{{"line_item":1,"coverage_probability":0.9,"price_low":0.0,"price_median":0.0,"price_high":0.0,"ceiling":null,"clause":""}}]}}"""
 
 #: The anchored framing: the model is told the settled distribution as a shape check.
 PROMPT = _TEMPLATE.format(distribution=_DISTRIBUTION_HINT)

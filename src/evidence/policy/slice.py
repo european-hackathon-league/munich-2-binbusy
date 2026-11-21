@@ -47,6 +47,29 @@ _HEADER_RE = re.compile(
 )
 
 
+#: Heads the paragraphs rescued from the dropped parts by `stated_amounts`.
+AMOUNTS_HEADER = "AMOUNTS STATED IN OTHER PARTS OF THE POLICY"
+
+_AMOUNT_RE = re.compile(r"\bEUR\s*\d|\d\s*EUR\b|\u20ac")
+_PARAGRAPH_RE = re.compile(r"\n[ \t]*\n")
+
+
+def stated_amounts(text: str) -> list[str]:
+    """Every paragraph of *text* that states an amount of money, verbatim.
+
+    The parts the slicer drops are mostly procedure, but a contract-specific figure can sit
+    in any of them. Game 45's means-of-payment limit of EUR 500 stood only in PART 2
+    ("of which means of payment are indemnified to no more than EUR 500"); PART 4 said no
+    more than "the sub-limit stated in the schedule". Both readings therefore priced the
+    stolen cash at 900. Eight of the first 47 Cases lose an amount this way.
+    """
+    return [
+        paragraph.strip("\n")
+        for paragraph in _PARAGRAPH_RE.split(text)
+        if _AMOUNT_RE.search(paragraph)
+    ]
+
+
 def _header_matches(policy_text: str) -> list[re.Match[str]]:
     return list(_HEADER_RE.finditer(policy_text))
 
@@ -102,6 +125,11 @@ def slice_policy(policy_text: str, keep: frozenset[int] = DEFAULT_KEEP) -> str:
         return policy_text
 
     sliced = "\n".join(kept)
+    amounts = stated_amounts(
+        "\n".join(sections[number] for number in sorted(sections) if number not in keep)
+    )
+    if amounts:
+        sliced = f"{sliced}\n{AMOUNTS_HEADER}\n\n" + "\n\n".join(amounts) + "\n"
     # A big policy that slices down to almost nothing means the parse went
     # wrong; hand back everything rather than blinding the pricing engine.
     if len(policy_text) >= MIN_SLICE_CHARS and len(sliced) < MIN_SLICE_CHARS:

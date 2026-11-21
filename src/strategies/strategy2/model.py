@@ -86,6 +86,7 @@ def parse_items(payload: dict[str, Any]) -> dict[int, Evidence]:
             price_low=low,
             price_median=median,
             price_high=high,
+            ceiling=max(number(item.get("ceiling")), 0.0),
         )
     return found
 
