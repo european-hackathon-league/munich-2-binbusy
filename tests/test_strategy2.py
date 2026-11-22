@@ -20,7 +20,7 @@ from src.strategies.strategy2.constants import (
     STRATEGY_NAME,
     SUBMISSION_RESERVE_SECONDS,
 )
-from src.strategies.strategy2.model import parse_items
+from src.strategies.strategy2.model import FULL_POLICY_ENV, build_request_text, parse_items
 from src.strategies.strategy2.prompts import (
     ENSEMBLE_PROMPTS,
     PROMPT,
@@ -545,6 +545,39 @@ class PolicyCeilingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolicySentToTheModelTests(unittest.TestCase):
+    """The slice by default; the whole Policy only when the switch is set."""
+
+    POLICY = (
+        "PART 2 - INSURED PERILS\n2.6.3 Loss of movable property is covered.\n\n"
+        "PART 4 - INSURED PROPERTY\n" + "4.1 Text about property.\n" * 200
+    )
+
+    def _request(self) -> str:
+        case = CaseData(
+            game_id=1,
+            case_dir=Path("."),
+            policy_text=self.POLICY,
+            description_text="A burglary.",
+            line_items=(LineItem(index=1, name="Clothing", quantity=1.0),),
+        )
+        return build_request_text(case, "PROMPT")
+
+    def test_the_slice_is_sent_by_default(self) -> None:
+        with patch.dict("os.environ", {}, clear=False) as environ:
+            environ.pop(FULL_POLICY_ENV, None)
+            request = self._request()
+        self.assertIn("=== POLICY (operative parts) ===", request)
+        self.assertNotIn("2.6.3 Loss of movable property", request)
+
+    def test_the_whole_policy_is_sent_when_the_switch_is_set(self) -> None:
+        with patch.dict("os.environ", {FULL_POLICY_ENV: "1"}):
+            request = self._request()
+        self.assertIn("=== POLICY ===", request)
+        self.assertIn("2.6.3 Loss of movable property", request)
+        self.assertIn("4.1 Text about property.", request)
 
 
 class AggregateClassSubLimit(unittest.TestCase):
