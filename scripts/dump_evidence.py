@@ -40,6 +40,7 @@ def _dump(evidence: dict[int, Evidence]) -> str:
                 "price_low": item.price_low,
                 "price_median": item.price_median,
                 "price_high": item.price_high,
+                "ceiling": item.ceiling,
             }
             for index, item in evidence.items()
         },

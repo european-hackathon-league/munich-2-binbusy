@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -86,6 +87,7 @@ def parse_items(payload: dict[str, Any]) -> dict[int, Evidence]:
             price_low=low,
             price_median=median,
             price_high=high,
+            ceiling=max(number(item.get("ceiling")), 0.0),
         )
     return found
 
@@ -94,7 +96,9 @@ def parse_items(payload: dict[str, Any]) -> dict[int, Evidence]:
 RAW_REPLY_DIR = Path("var/ai_log")
 
 
-def _log_raw_reply(game_id: int, prompt: str, raw: str, elapsed: float) -> None:
+def _log_raw_reply(
+    game_id: int, prompt: str, raw: str, elapsed: float, request_characters: int = 0
+) -> None:
     """Keep what the model actually said, for the Game we cannot re-run.
 
     Evidence is cached for backtests but never for live Games, so when Strategy 2 produced
@@ -121,6 +125,7 @@ def _log_raw_reply(game_id: int, prompt: str, raw: str, elapsed: float) -> None:
                     "service_tier": get_service_tier(),
                     "elapsed_seconds": round(elapsed, 2),
                     "recorded_at": time.time(),
+                    "request_characters": request_characters,
                     "reply_characters": len(raw),
                     "reply": raw,
                 },
@@ -132,11 +137,38 @@ def _log_raw_reply(game_id: int, prompt: str, raw: str, elapsed: float) -> None:
         logger.warning("Could not log the raw reply for Game %s: %s", game_id, error)
 
 
+#: Set to "1" to send the whole Policy instead of the slice. Off until it is replayed.
+FULL_POLICY_ENV = "STRATEGY2_FULL_POLICY"
+
+
+def send_full_policy() -> bool:
+    return os.environ.get(FULL_POLICY_ENV, "").strip() == "1"
+
+
+def policy_for_model(policy_text: str) -> tuple[str, str]:
+    """The Policy text the model reads, and the label it is sent under.
+
+    The slice is PARTs 3, 4, 5, 7 and 11, about half the Policy, plus the clauses PART 11
+    names and every stated amount from the rest. It was made to save reading time, and the
+    logged readings do not show that it does: over 94 of them, the reply time follows the
+    length of the reply (correlation 0.81), not the length of the Policy sent (-0.16, over
+    21,000 to 30,000 characters). What the slice costs is PART 2, where a peril's own clause
+    can say that an item is covered (burglary, Game 29) or paid at one half (surge, Games 17
+    and 19). What the whole Policy costs is unmeasured: PART 2 also lists exclusions for
+    perils this claim is not about, and a covered position read as uncovered is the dearest
+    mistake there is. Hence a switch, and a replay of both before it goes live.
+    """
+    if send_full_policy():
+        return policy_text, "POLICY"
+    return slice_policy(policy_text), "POLICY (operative parts)"
+
+
 def build_request_text(case: CaseData, prompt: str) -> str:
-    """The prompt plus the operative Policy, the damage description and the Line Items."""
+    """The prompt plus the Policy, the damage description and the Line Items."""
     line_items = json.dumps([item.to_dict() for item in case.line_items], ensure_ascii=False)
+    policy, label = policy_for_model(case.policy_text)
     return (
-        f"{prompt}\n\n=== POLICY (operative parts) ===\n{slice_policy(case.policy_text)}"
+        f"{prompt}\n\n=== {label} ===\n{policy}"
         f"\n\n=== DAMAGE DESCRIPTION ===\n{case.description_text}"
         f"\n\n=== LINE ITEMS ===\n{line_items}"
     )
@@ -159,7 +191,7 @@ def request_evidence(
     sliced = CaseData(
         game_id=case.game_id,
         case_dir=case.case_dir,
-        policy_text=slice_policy(case.policy_text),
+        policy_text=policy_for_model(case.policy_text)[0],
         description_text=case.description_text,
         line_items=case.line_items,
         image_paths=case.image_paths,
@@ -167,7 +199,8 @@ def request_evidence(
     content = build_input_content(sliced)
     # `build_input_content` attaches the invoice PDF and any photographs, then puts its own
     # prompt last. Replace that final text block with ours, keeping the attachments.
-    content[-1] = {"type": "input_text", "text": build_request_text(case, prompt or PROMPT)}
+    request_text = build_request_text(case, prompt or PROMPT)
+    content[-1] = {"type": "input_text", "text": request_text}
 
     started_at = time.time()
     response = get_llm_client().responses.create(
@@ -177,7 +210,9 @@ def request_evidence(
         input=[{"role": "user", "content": content}],
     )
     raw = str(response.output_text or "")
-    _log_raw_reply(case.game_id, prompt or PROMPT, raw, time.time() - started_at)
+    _log_raw_reply(
+        case.game_id, prompt or PROMPT, raw, time.time() - started_at, len(request_text)
+    )
     return parse_items(extract_json(raw))
 
 

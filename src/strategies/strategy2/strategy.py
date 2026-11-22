@@ -79,7 +79,7 @@ from src.data.models import CaseData, ItemPrice, Proposal
 from src.pricing.engine import Evidence, price_item
 from src.runtime.decisions import GameDecisions, ItemDecision, record
 from src.strategies.fast_path import STANDARD_CHARGE, STANDARD_LIMIT
-from src.strategies.strategy2.blend import blend, combine
+from src.strategies.strategy2.blend import blend, cap_at_ceiling, combine
 from src.strategies.strategy2.channels import aggregate_class_discount, local_evidence
 from src.strategies.strategy2.constants import (
     DRAW_GRACE_SECONDS,
@@ -138,6 +138,15 @@ def build_proposal(
         from_memory = memory_evidence.get(line_item.index)
         evidence = combine(from_model, from_memory)
         uncovered = bool(getattr(line_item, "quantity_missing", False))
+        # Channel E. A ceiling the Policy states outranks both the model's market price and
+        # the remembered one, so it is applied last, after they have been combined.
+        # `capped` is the outcome, not the act of lowering: a reading that already put its
+        # median on the ceiling, as the prompt asks, sits on the same stated amount as one
+        # that was pulled down to it, and must be priced the same way.
+        capped = False
+        if evidence is not None and from_model is not None:
+            evidence = cap_at_ceiling(evidence, from_model.ceiling, from_model.price_low)
+            capped = 0 < from_model.ceiling <= evidence.price_median
 
         channels: list[str] = []
         if uncovered:
@@ -146,6 +155,8 @@ def build_proposal(
             channels.append("B:memory")
         if from_model is not None:
             channels.append("C:model")
+        if capped:
+            channels.append("E:ceiling")
 
         if evidence is None:
             item_price = _uninformed_price(line_item.index)
@@ -158,7 +169,9 @@ def build_proposal(
                 # Exactly the condition that puts "B:memory" in `channels` above, so the
                 # decision log and the pricing agree about which items got the looser
                 # ceiling. Any drift between these two is a stage attribution that lies.
-                memory_backed=from_memory is not None and not uncovered,
+                # An estimate sitting on an amount the Policy states is anchored at least
+                # as firmly as a remembered price, so it gets the same treatment.
+                memory_backed=(from_memory is not None or capped) and not uncovered,
             )
             item_price = ItemPrice(
                 index=line_item.index,

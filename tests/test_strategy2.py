@@ -6,7 +6,12 @@ from unittest.mock import patch
 
 from src.data.models import CaseData, LineItem
 from src.pricing.engine import Evidence, price_item
-from src.strategies.strategy2.blend import blend as _blend, combine as _combine
+from src.strategies.strategy2.blend import (
+    agreed_ceiling,
+    blend as _blend,
+    cap_at_ceiling,
+    combine as _combine,
+)
 from src.strategies.strategy2.channels import aggregate_class_discount
 from src.strategies.strategy2.constants import (
     DRAW_GRACE_SECONDS,
@@ -15,7 +20,7 @@ from src.strategies.strategy2.constants import (
     STRATEGY_NAME,
     SUBMISSION_RESERVE_SECONDS,
 )
-from src.strategies.strategy2.model import parse_items
+from src.strategies.strategy2.model import FULL_POLICY_ENV, build_request_text, parse_items
 from src.strategies.strategy2.prompts import (
     ENSEMBLE_PROMPTS,
     PROMPT,
@@ -409,8 +414,170 @@ class ProposeTests(unittest.TestCase):
             self.assertEqual(price.source, STRATEGY_NAME)
 
 
+
+class PolicyCeilingTests(unittest.TestCase):
+    """An amount the Policy states bounds the estimate, the Charge and the Limit."""
+
+    #: Game 45, the stolen watch: both readings and the remembered price, as logged.
+    WATCH_READINGS = (
+        Evidence(3, 0.98, 7000.0, 9800.0, 16000.0, ceiling=2500.0),
+        Evidence(3, 0.98, 7000.0, 9500.0, 16500.0, ceiling=2500.0),
+    )
+    WATCH_MEMORY = Evidence(3, 0.9, 3562.0, 7225.0, 14655.0)
+
+    def test_the_parser_reads_a_stated_ceiling(self) -> None:
+        found = parse_items(
+            {
+                "items": [
+                    {"line_item": 3, "price_median": 2500, "ceiling": 2500},
+                    {"line_item": 4, "price_median": 80, "ceiling": None},
+                    {"line_item": 5, "price_median": 80},
+                ]
+            }
+        )
+        self.assertEqual(found[3].ceiling, 2500.0)
+        self.assertEqual(found[4].ceiling, 0.0)
+        self.assertEqual(found[5].ceiling, 0.0)
+
+    def test_a_ceiling_binds_only_when_every_reading_reports_one(self) -> None:
+        with_one = Evidence(1, 0.9, 400.0, 500.0, 600.0, ceiling=250.0)
+        without = Evidence(1, 0.9, 400.0, 500.0, 600.0)
+        self.assertEqual(agreed_ceiling([with_one, without]), 0.0)
+        self.assertEqual(_blend([{1: with_one}, {1: without}])[1].ceiling, 0.0)
+
+    def test_disagreeing_readings_take_the_higher_ceiling(self) -> None:
+        low = Evidence(1, 0.9, 400.0, 500.0, 600.0, ceiling=500.0)
+        high = Evidence(1, 0.9, 400.0, 500.0, 600.0, ceiling=2500.0)
+        self.assertEqual(_blend([{1: low}, {1: high}])[1].ceiling, 2500.0)
+
+    def test_an_estimate_under_its_ceiling_is_left_alone(self) -> None:
+        evidence = Evidence(1, 0.9, 80.0, 100.0, 125.0)
+        self.assertIs(cap_at_ceiling(evidence, 500.0), evidence)
+        self.assertIs(cap_at_ceiling(evidence, 0.0), evidence)
+
+    def test_the_ceiling_beats_both_the_model_and_the_remembered_price(self) -> None:
+        case = case_with(LineItem(3, "Compensation for stolen watch (1 pcs)"))
+        model = _blend([{3: reading} for reading in self.WATCH_READINGS])
+        decisions: list = []
+
+        price = build_proposal(case, model, {3: self.WATCH_MEMORY}, decisions).by_index()[3]
+
+        self.assertLessEqual(price.charge_price, 2500.0)
+        self.assertLessEqual(price.acceptance_limit, 2500.0)
+        self.assertEqual(decisions[0].price_median, 2500.0)
+        self.assertIn("E:ceiling", decisions[0].channels)
+        # The Fair Value was 2,375-2,553: the Charge has to be fair, and the Limit has to
+        # accept the fair Charges rivals made (up to 2,375) and refuse 2,553.
+        self.assertLess(price.charge_price, 2375.0)
+        self.assertGreater(price.charge_price, 2000.0)
+        self.assertGreaterEqual(price.acceptance_limit, 2375.0)
+
+    def test_without_a_ceiling_the_same_item_is_priced_as_before(self) -> None:
+        case = case_with(LineItem(3, "Compensation for stolen watch (1 pcs)"))
+        readings = [
+            Evidence(3, r.coverage_probability, r.price_low, r.price_median, r.price_high)
+            for r in self.WATCH_READINGS
+        ]
+        decisions: list = []
+        price = build_proposal(
+            case, _blend([{3: r} for r in readings]), {3: self.WATCH_MEMORY}, decisions
+        ).by_index()[3]
+        self.assertGreater(price.charge_price, 6000.0)
+        self.assertNotIn("E:ceiling", decisions[0].channels)
+
+    def test_a_capped_item_without_a_remembered_price_keeps_a_usable_limit(self) -> None:
+        case = case_with(LineItem(3, "Compensation for stolen watch (1 pcs)"))
+        model = _blend([{3: reading} for reading in self.WATCH_READINGS])
+        price = build_proposal(case, model, {}).by_index()[3]
+        self.assertGreaterEqual(price.acceptance_limit, 2375.0)
+        self.assertLessEqual(price.acceptance_limit, 2500.0)
+
+    def test_a_reading_already_on_its_ceiling_is_priced_like_one_pulled_down_to_it(self) -> None:
+        # The prompt asks for price_median at the ceiling. Without this the item fell back
+        # to the Limit of an unanchored model price: 708 against a Fair Value of 2,375.
+        case = case_with(LineItem(3, "Compensation for stolen watch (1 pcs)"))
+        on_it = {3: Evidence(3, 0.98, 2300.0, 2500.0, 2500.0, ceiling=2500.0)}
+        decisions: list = []
+        price = build_proposal(case, on_it, {}, decisions).by_index()[3]
+        self.assertGreaterEqual(price.acceptance_limit, 2375.0)
+        self.assertLessEqual(price.acceptance_limit, 2500.0)
+        self.assertIn("E:ceiling", decisions[0].channels)
+
+        under_it = {3: Evidence(3, 0.98, 1500.0, 1800.0, 2100.0, ceiling=2500.0)}
+        decisions = []
+        build_proposal(case, under_it, {}, decisions)
+        self.assertNotIn("E:ceiling", decisions[0].channels)
+
+    def test_readings_that_all_price_at_zero_still_have_to_agree_on_the_ceiling(self) -> None:
+        with_one = Evidence(1, 0.1, 0.0, 0.0, 0.0, ceiling=500.0)
+        without = Evidence(1, 0.1, 0.0, 0.0, 0.0)
+        self.assertEqual(_blend([{1: with_one}, {1: without}])[1].ceiling, 0.0)
+        self.assertEqual(_blend([{1: without}, {1: with_one}])[1].ceiling, 0.0)
+        self.assertEqual(_blend([{1: with_one}, {1: with_one}])[1].ceiling, 500.0)
+
+    def test_a_lower_remembered_price_does_not_widen_a_loss_the_model_puts_above_the_ceiling(
+        self,
+    ) -> None:
+        # Game 45, the cash: both readings 800-1,000 under a EUR 500 limit, and a remembered
+        # price below them whose band reaches far under the ceiling.
+        case = case_with(LineItem(4, "Compensation for cash taken in robbery (1 pcs)"))
+        model = {4: Evidence(4, 0.97, 800.0, 900.0, 1000.0, ceiling=500.0)}
+        memory = {4: Evidence(4, 0.9, 240.0, 480.0, 960.0)}
+        price = build_proposal(case, model, memory).by_index()[4]
+        # The Fair Value was 475-517: accept a fair 475, never go above the ceiling.
+        self.assertGreaterEqual(price.acceptance_limit, 475.0)
+        self.assertLessEqual(price.acceptance_limit, 500.0)
+        self.assertLess(price.charge_price, 475.0)
+
+    def test_the_class_discount_keeps_the_ceiling(self) -> None:
+        case = case_with(LineItem(1, "Gold watch"), LineItem(2, "Diamond ring"))
+        model = {
+            1: Evidence(1, 0.9, 4000.0, 5000.0, 6000.0, ceiling=2500.0),
+            2: Evidence(2, 0.9, 800.0, 1000.0, 1200.0, ceiling=2500.0),
+        }
+        self.assertEqual(aggregate_class_discount(case, model)[2].ceiling, 2500.0)
+
+    def test_the_prompt_asks_for_the_ceiling(self) -> None:
+        for prompt in ENSEMBLE_PROMPTS:
+            self.assertIn("- ceiling:", prompt)
+            self.assertIn('"ceiling":null', prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolicySentToTheModelTests(unittest.TestCase):
+    """The slice by default; the whole Policy only when the switch is set."""
+
+    POLICY = (
+        "PART 2 - INSURED PERILS\n2.6.3 Loss of movable property is covered.\n\n"
+        "PART 4 - INSURED PROPERTY\n" + "4.1 Text about property.\n" * 200
+    )
+
+    def _request(self) -> str:
+        case = CaseData(
+            game_id=1,
+            case_dir=Path("."),
+            policy_text=self.POLICY,
+            description_text="A burglary.",
+            line_items=(LineItem(index=1, name="Clothing", quantity=1.0),),
+        )
+        return build_request_text(case, "PROMPT")
+
+    def test_the_slice_is_sent_by_default(self) -> None:
+        with patch.dict("os.environ", {}, clear=False) as environ:
+            environ.pop(FULL_POLICY_ENV, None)
+            request = self._request()
+        self.assertIn("=== POLICY (operative parts) ===", request)
+        self.assertNotIn("2.6.3 Loss of movable property", request)
+
+    def test_the_whole_policy_is_sent_when_the_switch_is_set(self) -> None:
+        with patch.dict("os.environ", {FULL_POLICY_ENV: "1"}):
+            request = self._request()
+        self.assertIn("=== POLICY ===", request)
+        self.assertIn("2.6.3 Loss of movable property", request)
+        self.assertIn("4.1 Text about property.", request)
 
 
 class AggregateClassSubLimit(unittest.TestCase):

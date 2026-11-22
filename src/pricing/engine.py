@@ -994,6 +994,8 @@ class Evidence:
     price_low: float = 0.0
     price_median: float = 0.0
     price_high: float = 0.0
+    #: The most the Policy can pay for this Line Item (a stated sub-limit or cap), 0 if none.
+    ceiling: float = 0.0
 
     def with_defaults(self) -> Evidence:
         """Fill a missing or incoherent band from whatever is usable."""
